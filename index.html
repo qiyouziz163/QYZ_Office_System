@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.5, user-scalable=yes">
-    <title>企优咨 · 内部办公系统 </title>
+    <title>企优咨 · 内部办公系统（WPS兼容版）</title>
     <!-- 引入 docx 库 -->
     <script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.min.js"></script>
     <style>
@@ -580,12 +580,13 @@
                     alert('docx库未加载，请刷新页面重试');
                     return;
                 }
-                const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, BorderStyle, AlignmentType, UnderlineType, ImageRun } = docx;
+                const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, BorderStyle, AlignmentType, UnderlineType, ImageRun, WidthType } = docx;
                 const BODY_FONT = "SimSun";
                 const BODY_SIZE = 24;
                 const TITLE_SIZE = 32;
 
                 if (currentModule === 'copyright') {
+                    // ... 版权下载部分保持不变 ...
                     let children = [];
                     let N = numToChinese(cpData.works.length);
                     children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `作品登记申请表（${N}）`, bold: true, font: BODY_FONT, size: TITLE_SIZE })] }));
@@ -662,7 +663,10 @@
                     URL.revokeObjectURL(link.href);
 
                 } else if (currentModule === 'trademark') {
-                    // 商标代理委托书下载（完整实现）
+                    // 商标代理委托书下载 —— 使用绝对宽度（缇）确保 WPS 兼容
+                    // A4 纸张宽度约为 11906 缇（21cm * 567 缇/cm ≈ 11907），每列取一半 5953
+                    const COL_WIDTH_TWIPS = 5953; // 固定列宽，保证两列等宽且铺满
+
                     let children = [];
                     children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '商 标 代 理 委 托 书', bold: true, font: BODY_FONT, size: TITLE_SIZE })] }));
 
@@ -696,15 +700,15 @@
                     ];
                     children.push(new Paragraph({ children: descChildren }));
 
-                    // 构建事宜表格
+                    // 构建事宜表格 —— 使用固定列宽
                     const half = Math.ceil(trademarkIssuesList.length / 2);
                     const leftItems = trademarkIssuesList.slice(0, half);
                     const rightItems = trademarkIssuesList.slice(half);
                     const maxRows = Math.max(leftItems.length, rightItems.length);
                     let tableRows = [];
                     for (let i = 0; i < maxRows; i++) {
-                        let leftCell = new TableCell({ children: [new Paragraph('')] });
-                        let rightCell = new TableCell({ children: [new Paragraph('')] });
+                        let leftCell, rightCell;
+                        // 左侧单元格
                         if (leftItems[i]) {
                             let item = leftItems[i];
                             let isChecked = tmData.事宜[item.key];
@@ -715,8 +719,17 @@
                             } else {
                                 runs = [ new TextRun({ text: mark + ' ', bold: isChecked, underline: isChecked ? { type: UnderlineType.SINGLE } : undefined, font: BODY_FONT, size: BODY_SIZE }), new TextRun({ text: item.label.replace(/<br>/g, ''), bold: isChecked, underline: isChecked ? { type: UnderlineType.SINGLE } : undefined, font: BODY_FONT, size: BODY_SIZE }) ];
                             }
-                            leftCell = new TableCell({ children: [ new Paragraph({ children: runs }) ] });
+                            leftCell = new TableCell({ 
+                                width: { size: COL_WIDTH_TWIPS, type: WidthType.DXA },
+                                children: [ new Paragraph({ children: runs }) ] 
+                            });
+                        } else {
+                            leftCell = new TableCell({ 
+                                width: { size: COL_WIDTH_TWIPS, type: WidthType.DXA },
+                                children: [ new Paragraph('') ] 
+                            });
                         }
+                        // 右侧单元格
                         if (rightItems[i]) {
                             let item = rightItems[i];
                             let isChecked = tmData.事宜[item.key];
@@ -727,33 +740,60 @@
                             } else {
                                 runs = [ new TextRun({ text: mark + ' ', bold: isChecked, underline: isChecked ? { type: UnderlineType.SINGLE } : undefined, font: BODY_FONT, size: BODY_SIZE }), new TextRun({ text: item.label.replace(/<br>/g, ''), bold: isChecked, underline: isChecked ? { type: UnderlineType.SINGLE } : undefined, font: BODY_FONT, size: BODY_SIZE }) ];
                             }
-                            rightCell = new TableCell({ children: [ new Paragraph({ children: runs }) ] });
+                            rightCell = new TableCell({ 
+                                width: { size: COL_WIDTH_TWIPS, type: WidthType.DXA },
+                                children: [ new Paragraph({ children: runs }) ] 
+                            });
+                        } else {
+                            rightCell = new TableCell({ 
+                                width: { size: COL_WIDTH_TWIPS, type: WidthType.DXA },
+                                children: [ new Paragraph('') ] 
+                            });
                         }
                         tableRows.push(new TableRow({ children: [ leftCell, rightCell ] }));
                     }
                     let issuesTable = new Table({
                         rows: tableRows,
-                        width: { size: 100, type: docx.WidthType.PERCENTAGE },
-                        borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } }
+                        width: { size: 100, type: WidthType.PERCENTAGE }, // 表格总宽仍占100%，列宽固定后会自动撑满
+                        borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1 },
+                            bottom: { style: BorderStyle.SINGLE, size: 1 },
+                            left: { style: BorderStyle.SINGLE, size: 1 },
+                            right: { style: BorderStyle.SINGLE, size: 1 },
+                            insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+                            insideVertical: { style: BorderStyle.SINGLE, size: 1 }
+                        }
                     });
                     children.push(new Paragraph(''));
                     children.push(issuesTable);
                     children.push(new Paragraph(''));
 
-                    // 签名表格
-                    let leftCell = new TableCell({ children: [
-                        new Paragraph({ children: [ new TextRun('委托人地址: '), new TextRun({ text: tmData.委托人地址, underline: { type: UnderlineType.SINGLE }, font: BODY_FONT, size: BODY_SIZE }) ] }),
-                        new Paragraph({ children: [ new TextRun('联 系 人: '), new TextRun({ text: tmData.联系人, underline: { type: UnderlineType.SINGLE }, font: BODY_FONT, size: BODY_SIZE }) ] }),
-                        new Paragraph({ children: [ new TextRun('电　　话: '), new TextRun({ text: tmData.电话, underline: { type: UnderlineType.SINGLE }, font: BODY_FONT, size: BODY_SIZE }) ] }),
-                        new Paragraph({ children: [ new TextRun('邮政 编 码: '), new TextRun({ text: tmData.邮政编码, underline: { type: UnderlineType.SINGLE }, font: BODY_FONT, size: BODY_SIZE }) ] })
+                    // 签名表格 —— 同样使用固定列宽
+                    let leftSigCell = new TableCell({ 
+                        width: { size: COL_WIDTH_TWIPS, type: WidthType.DXA },
+                        children: [
+                            new Paragraph({ children: [ new TextRun('委托人地址: '), new TextRun({ text: tmData.委托人地址, underline: { type: UnderlineType.SINGLE }, font: BODY_FONT, size: BODY_SIZE }) ] }),
+                            new Paragraph({ children: [ new TextRun('联 系 人: '), new TextRun({ text: tmData.联系人, underline: { type: UnderlineType.SINGLE }, font: BODY_FONT, size: BODY_SIZE }) ] }),
+                            new Paragraph({ children: [ new TextRun('电　　话: '), new TextRun({ text: tmData.电话, underline: { type: UnderlineType.SINGLE }, font: BODY_FONT, size: BODY_SIZE }) ] }),
+                            new Paragraph({ children: [ new TextRun('邮政 编 码: '), new TextRun({ text: tmData.邮政编码, underline: { type: UnderlineType.SINGLE }, font: BODY_FONT, size: BODY_SIZE }) ] })
                     ]});
-                    let rightCell = new TableCell({ children: [
-                        new Paragraph({ children: [ new TextRun({ text: '          委托人章戳: ', bold: true, color: 'FF0000', font: BODY_FONT, size: BODY_SIZE }), new TextRun({ text: '____________________', bold: true, font: BODY_FONT, size: BODY_SIZE }) ] }),
-                        new Paragraph({ alignment: AlignmentType.RIGHT, children: [ new TextRun({ text: tmData.签章日期, underline: { type: UnderlineType.SINGLE }, font: BODY_FONT, size: BODY_SIZE }) ] })
+                    let rightSigCell = new TableCell({ 
+                        width: { size: COL_WIDTH_TWIPS, type: WidthType.DXA },
+                        children: [
+                            new Paragraph({ children: [ new TextRun({ text: '   委托人章戳: ', bold: true, color: 'FF0000', font: BODY_FONT, size: BODY_SIZE }), new TextRun({ text: '____________________', bold: true, font: BODY_FONT, size: BODY_SIZE }) ] }),
+                            new Paragraph({ alignment: AlignmentType.RIGHT, children: [ new TextRun({ text: tmData.签章日期, underline: { type: UnderlineType.SINGLE }, font: BODY_FONT, size: BODY_SIZE }) ] })
                     ]});
                     let signatureTable = new Table({
-                        rows: [ new TableRow({ children: [ leftCell, rightCell ] }) ],
-                        borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } }
+                        rows: [ new TableRow({ children: [ leftSigCell, rightSigCell ] }) ],
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        borders: {
+                            top: { style: BorderStyle.SINGLE, size: 1 },
+                            bottom: { style: BorderStyle.SINGLE, size: 1 },
+                            left: { style: BorderStyle.SINGLE, size: 1 },
+                            right: { style: BorderStyle.SINGLE, size: 1 },
+                            insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+                            insideVertical: { style: BorderStyle.SINGLE, size: 1 }
+                        }
                     });
                     children.push(signatureTable);
 
@@ -766,7 +806,7 @@
                     URL.revokeObjectURL(link.href);
 
                 } else if (currentModule === 'assign') {
-                    // 商标同意转让证明下载
+                    // 商标同意转让证明下载（保持不变）
                     const list = assignData.trademarkList || [];
                     const total = list.length;
                     let trademarkRuns = [];
@@ -789,7 +829,6 @@
                         new TextRun({ text: `件）商标转让给受让人。`, font: BODY_FONT, size: BODY_SIZE })
                     ] }));
                     children.push(new Paragraph(''));
-                    // 签名表格
                     let leftCell = new TableCell({ children: [
                         new Paragraph({ children: [ new TextRun({ text: '转让人：', font: BODY_FONT, size: BODY_SIZE }), new TextRun({ text: '____________________', font: BODY_FONT, size: BODY_SIZE }) ] }),
                         new Paragraph({ children: [ new TextRun({ text: '（章戳、签字）', font: BODY_FONT, size: BODY_SIZE }) ] }),
